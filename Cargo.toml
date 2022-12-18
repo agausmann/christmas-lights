@@ -1,0 +1,22 @@
+[package]
+name = "christmas-lights"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+embedded-hal = "0.2"
+fugit = "0.3"
+rp2040-boot2 = "0.2"
+rp2040-hal = { version = "0.6", features = ["rt"] }
+
+[profile.dev]
+opt-level = 3
+lto = true
+
+[profile.release]
+opt-level = 3
+lto = true
