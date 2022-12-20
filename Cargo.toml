@@ -6,19 +6,34 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cortex-m = "0.7"
 cortex-m-rt = "0.7"
-embedded-hal = "0.2"
-fugit = "0.3"
-rp2040-boot2 = "0.2"
-rp2040-hal = { version = "0.7", features = ["rt"] }
-smart-leds = "0.3"
-ws2812-pio = "0.5"
+futures-util = { version = "0.3", default-features = false }
+embassy-time = { git = "https://github.com/agausmann/embassy.git" }
+ws2812-spi = "0.4"
+
+[dependencies.embassy-executor]
+git = "https://github.com/agausmann/embassy.git"
+features = [
+    "integrated-timers",
+    "nightly",
+]
+
+[dependencies.embassy-rp]
+git = "https://github.com/agausmann/embassy.git"
+features = [
+    "critical-section-impl",
+    "pio",
+    "time-driver",
+    "nightly",
+]
 
 [profile.dev]
-opt-level = 3
+opt-level = 's'
 lto = true
 
 [profile.release]
-opt-level = 3
+opt-level = 's'
 lto = true
+
+[patch.crates-io]
+pio = { git = "https://github.com/rp-rs/pio-rs", branch = "main" }

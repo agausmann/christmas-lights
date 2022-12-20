@@ -1,78 +1,43 @@
 #![no_std]
 #![no_main]
 #![deny(unsafe_op_in_unsafe_fn)]
+#![feature(type_alias_impl_trait)]
 
-use core::panic::PanicInfo;
-use cortex_m::asm::wfi;
-use embedded_hal::digital::v2::OutputPin;
-use rp2040_hal::{
-    clocks, gpio::Pins, pac::Peripherals, pio::PIOExt, sio::Sio, timer::Timer, watchdog::Watchdog,
-    Clock,
-};
-use smart_leds::SmartLedsWrite;
-use ws2812_pio::Ws2812;
+use embassy_executor::Spawner;
+use embassy_rp::{gpio, spi};
+use embassy_time::{Duration, Ticker};
+use futures_util::StreamExt;
+use ws2812_spi::Ws2812;
 
-#[link_section = ".boot2"]
-#[used]
-pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+const NUM_LEDS: usize = 200;
 
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    let _ = info;
+#[embassy_executor::main]
+async fn main(spawner: Spawner) {
+    let p = embassy_rp::init(Default::default());
 
-    cortex_m::interrupt::disable();
+    let mut spi_config = spi::Config::default();
+    spi_config.frequency = 3_800_000;
+    spi_config.polarity = spi::Polarity::IdleLow;
+    /*
+    let mut ws = Ws2812::new(spi::Spi::new_blocking(
+        p.SPI1, p.PIN_14, // Throwaway pin for clk (FIXME address this in embassy)
+        p.PIN_15, p.PIN_16, // Throwaway pin for miso (FIXME address this in ws2812-spi)
+        spi_config,
+    ));
+    */
+    let mut ticker = Ticker::every(Duration::from_millis(33));
+
+    let mut indicator = gpio::Output::new(p.PIN_25, gpio::Level::High);
+
     loop {
-        wfi();
+        for i in 0..NUM_LEDS {
+            ticker.next().await;
+            indicator.toggle();
+        }
     }
 }
 
-#[rp2040_hal::entry]
-fn main() -> ! {
-    let mut dp = Peripherals::take().unwrap();
-    let cp = cortex_m::Peripherals::take().unwrap();
-
-    let mut watchdog = Watchdog::new(dp.WATCHDOG);
-
-    let clocks = clocks::init_clocks_and_plls(
-        12_000_000,
-        dp.XOSC,
-        dp.CLOCKS,
-        dp.PLL_SYS,
-        dp.PLL_USB,
-        &mut dp.RESETS,
-        &mut watchdog,
-    )
-    .map_err(|_| "failed to init clocks")
-    .unwrap();
-
-    let sio = Sio::new(dp.SIO);
-    let pins = Pins::new(dp.IO_BANK0, dp.PADS_BANK0, sio.gpio_bank0, &mut dp.RESETS);
-
-    let timer = Timer::new(dp.TIMER, &mut dp.RESETS);
-    let (mut pio, sm0, _, _, _) = dp.PIO0.split(&mut dp.RESETS);
-    let mut ws = Ws2812::new(
-        pins.gpio16.into_mode(),
-        &mut pio,
-        sm0,
-        clocks.peripheral_clock.freq(),
-        timer.count_down(),
-    );
-    let mut delay = cortex_m::delay::Delay::new(cp.SYST, clocks.system_clock.freq().to_Hz());
-
-    let mut indicator = pins.gpio25.into_push_pull_output();
-    indicator.set_high().ok();
-
-    loop {
-        for i in 0..200 {
-            ws.write((0..200).map(|j| {
-                if j == i || j == i + 1 {
-                    [255, 255, 255]
-                } else {
-                    [0, 0, 0]
-                }
-            }))
-            .ok();
-            delay.delay_ms(100);
-        }
-    }
+#[panic_handler]
+fn panic(_: &core::panic::PanicInfo) -> ! {
+    loop {}
 }
