@@ -10,10 +10,17 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7"
 embedded-hal = "0.2"
 fugit = "0.3"
+micromath = "2.0"
+nb = "1.0"
 rp2040-boot2 = "0.2"
 rp2040-hal = { version = "0.7", features = ["rt"] }
 smart-leds = "0.3"
 ws2812-pio = "0.5"
+
+[dependencies.nanorand]
+version = "0.7"
+default-features = false
+features = ["wyrand"]
 
 [profile.dev]
 opt-level = 3
