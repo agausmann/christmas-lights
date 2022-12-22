@@ -92,10 +92,16 @@ impl Snowflake {
     fn row(&self) -> usize {
         ((self.phase as usize) * WINDOW_ROWS) / (self.period as usize)
     }
+
+    /// Fixed-point fraction between 0 and 255, indicating
+    ///  how far between rows this flake is.
+    fn fract(&self) -> u8 {
+        (self.phase * 256 * (WINDOW_ROWS as u32) / self.period) as u8
+    }
 }
 
 struct Snowflakes {
-    leds: [[bool; WINDOW_ROWS]; WINDOW_COLS],
+    leds: [[u8; WINDOW_ROWS]; WINDOW_COLS],
     snowflakes: [Snowflake; 20],
 }
 
@@ -105,7 +111,7 @@ impl Snowflakes {
         R: Rng<OUTPUT>,
     {
         Self {
-            leds: [[false; WINDOW_ROWS]; WINDOW_COLS],
+            leds: [[0; WINDOW_ROWS]; WINDOW_COLS],
             snowflakes: core::array::from_fn(|_| Snowflake::generate(rng)),
         }
     }
@@ -115,21 +121,30 @@ impl Snowflakes {
         R: Rng<OUTPUT>,
     {
         // Clear led buffer
-        self.leds = [[false; WINDOW_ROWS]; WINDOW_COLS];
+        self.leds = [[0; WINDOW_ROWS]; WINDOW_COLS];
 
         // Update snowflakes and set leds
         for flake in &mut self.snowflakes {
             flake.tick(rng);
-            self.leds[flake.column][flake.row()] = true;
+            let row1 = flake.row();
+            let row2 = row1 + 1;
+            let fract2 = flake.fract();
+            let fract1 = 255 - fract2;
+
+            let led = &mut self.leds[flake.column][row1];
+            *led = led.saturating_add(fract1);
+
+            if row2 < WINDOW_ROWS {
+                let led = &mut self.leds[flake.column][row2];
+                *led = led.saturating_add(fract2);
+            }
         }
     }
 
     fn color(&self, row: usize, col: usize, max_brightness: u32) -> [u8; 3] {
-        if self.leds[col][row] {
-            [max_brightness as u8; 3]
-        } else {
-            [0; 3]
-        }
+        let brightness = (self.leds[col][row] as u32) * max_brightness / 255;
+        let output = GAMMA[brightness as usize];
+        [output; 3]
     }
 }
 
@@ -240,7 +255,7 @@ fn main() -> ! {
                 } else {
                     row
                 };
-                flakes.color(row, col, 63)
+                flakes.color(row, col, 95)
             })
         }))
         .unwrap();
