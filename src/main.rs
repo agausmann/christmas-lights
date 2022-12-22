@@ -27,16 +27,6 @@ const WINDOW_COLS: usize = 4;
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    let _ = info;
-
-    cortex_m::interrupt::disable();
-    loop {
-        wfi();
-    }
-}
-
 static GAMMA: Lazy<[u8; 256]> = Lazy::new(|| {
     let mut gamma = [0u8; 256];
     for i in 0..256 {
@@ -61,21 +51,15 @@ struct Shimmer {
     color: usize,
 }
 
-struct Snowflake {
-    column: usize,
-    phase: u32,
-    period: u32,
-}
-
-impl Snowflake {
+impl Shimmer {
     fn generate<R, const OUTPUT: usize>(rng: &mut R) -> Self
     where
         R: Rng<OUTPUT>,
     {
         Self {
-            column: rng.generate_range(0..WINDOW_COLS),
+            period: rng.generate_range(200..480),
             phase: 0,
-            period: rng.generate_range(200..720),
+            color: rng.generate_range(0..PALETTE.len()),
         }
     }
 
@@ -85,18 +69,22 @@ impl Snowflake {
     {
         self.phase = (self.phase + 1) % self.period;
         if self.phase == 0 {
-            *self = Self::generate(rng);
+            self.color = rng.generate_range(0..PALETTE.len());
         }
     }
 
-    fn row(&self) -> usize {
-        ((self.phase as usize) * WINDOW_ROWS) / (self.period as usize)
-    }
+    fn color(&self, max_brightness: u32) -> [u8; 3] {
+        let midpoint = self.period / 2;
+        let x = if self.phase < midpoint {
+            self.phase
+        } else {
+            self.period - self.phase
+        };
+        let brightness = x * max_brightness / midpoint;
+        let output = GAMMA[brightness as usize];
+        let color = &PALETTE[self.color];
 
-    /// Fixed-point fraction between 0 and 255, indicating
-    ///  how far between rows this flake is.
-    fn fract(&self) -> u8 {
-        (self.phase * 256 * (WINDOW_ROWS as u32) / self.period) as u8
+        [color[0] * output, color[1] * output, color[2] * output]
     }
 }
 
@@ -148,15 +136,21 @@ impl Snowflakes {
     }
 }
 
-impl Shimmer {
+struct Snowflake {
+    column: usize,
+    phase: u32,
+    period: u32,
+}
+
+impl Snowflake {
     fn generate<R, const OUTPUT: usize>(rng: &mut R) -> Self
     where
         R: Rng<OUTPUT>,
     {
         Self {
-            period: rng.generate_range(200..480),
+            column: rng.generate_range(0..WINDOW_COLS),
             phase: 0,
-            color: rng.generate_range(0..PALETTE.len()),
+            period: rng.generate_range(200..720),
         }
     }
 
@@ -166,22 +160,28 @@ impl Shimmer {
     {
         self.phase = (self.phase + 1) % self.period;
         if self.phase == 0 {
-            self.color = rng.generate_range(0..PALETTE.len());
+            *self = Self::generate(rng);
         }
     }
 
-    fn color(&self, max_brightness: u32) -> [u8; 3] {
-        let midpoint = self.period / 2;
-        let x = if self.phase < midpoint {
-            self.phase
-        } else {
-            self.period - self.phase
-        };
-        let brightness = x * max_brightness / midpoint;
-        let output = GAMMA[brightness as usize];
-        let color = &PALETTE[self.color];
+    fn row(&self) -> usize {
+        ((self.phase as usize) * WINDOW_ROWS) / (self.period as usize)
+    }
 
-        [color[0] * output, color[1] * output, color[2] * output]
+    /// Fixed-point fraction between 0 and 255, indicating
+    ///  how far between rows this flake is.
+    fn fract(&self) -> u8 {
+        (self.phase * 256 * (WINDOW_ROWS as u32) / self.period) as u8
+    }
+}
+
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    let _ = info;
+
+    cortex_m::interrupt::disable();
+    loop {
+        wfi();
     }
 }
 
